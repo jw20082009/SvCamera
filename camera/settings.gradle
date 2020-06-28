@@ -1,0 +1,2 @@
+rootProject.name='SvCamera'
+include ':app'
