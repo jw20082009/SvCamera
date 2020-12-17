@@ -2,7 +2,7 @@ package com.wilbert.svcamera;
 
 import android.os.Bundle;
 
-public class MainActivity extends Permission {
+public class CameraActivity extends Permission {
 
     CameraFragment fragment;
 
