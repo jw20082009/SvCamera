@@ -57,13 +57,16 @@ public class MeteringDelegate {
                         public void onFaceDetection(Camera.Face[] faces, Camera camera) {
                             boolean hasFace = faces != null && faces.length > 0;
                             mHasFace.set(hasFace);
-                            Rect rect = null;
-                            Log.e(TAG,"mHasFace:"+hasFace+";"+(hasFace?faces[0].rect:""));
-                            if (!hasFace) {
-                                rect = new Rect(0,0,0,0);
-                            } else {
-                                // 无人脸
-                                rect = faces[0].rect;
+                            Rect rect = new Rect(0,0,0,0);
+                            if(MeteringDelegate.sDebug) {
+                                Log.e(TAG, "mHasFace:" + hasFace + ";" + (hasFace ? faces[0].rect : ""));
+                            }
+                            if (hasFace) {
+                                Rect faceRect = faces[0].rect;
+                                rect.set(CameraHelper.clamp(faceRect.left,-1000,1000),
+                                        CameraHelper.clamp(faceRect.top,-1000,1000),
+                                        CameraHelper.clamp(faceRect.right,-1000,1000),
+                                        CameraHelper.clamp(faceRect.bottom,-1000,1000));
                             }
                             getMeteringController().onFaceEvent(hasFace,rect);
                         }

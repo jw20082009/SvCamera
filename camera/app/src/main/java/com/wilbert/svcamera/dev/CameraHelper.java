@@ -67,51 +67,6 @@ public class CameraHelper {
         pointTransform.scaledPreviewHeight = scaledPreviewHeight;
     }
 
-    // 前置摄像头人脸测光策略，获取用户手动触摸区域在最终分辨率的相对位置的矩形
-    public static Rect calculateTapArea(float x, float y, int viewWidth, int viewHeight,
-                                        float areaMultiple, int captureWidth, int captureHeight, int orientation, boolean isFront) {
-        if (orientation == 90 || orientation == 270) {
-            int tmp = captureHeight;
-            captureHeight = captureWidth;
-            captureWidth = tmp;
-        }
-
-        float imageScale, leftMargin = 0.0f, topMargin = 0.0f, tmp;
-        // map screen size to capture size
-        if (captureHeight * viewWidth > captureWidth * viewHeight) {
-            imageScale = viewWidth * 1.0f / captureWidth;
-            topMargin = (captureHeight - viewHeight / imageScale) / 2;
-        } else {
-            imageScale = viewHeight * 1.0f / captureHeight;
-            leftMargin = (captureWidth - viewWidth / imageScale) / 2;
-        }
-
-        x = x / imageScale + leftMargin;
-        y = y / imageScale + topMargin;
-
-        if (isFront) {
-            x = captureWidth - x;
-        }
-
-        if (orientation == 90) {
-            tmp = x;
-            x = y;
-            y = captureHeight - tmp;
-        } else if (orientation == 270) {
-            tmp = x;
-            x = captureWidth - y;
-            y = tmp;
-        }
-
-        Rect rect = new Rect();
-        rect.left = CameraHelper.clamp((int) (x - areaMultiple / 2 * captureWidth), 0, captureHeight);
-        rect.right = CameraHelper.clamp((int) (x + areaMultiple / 2 * captureWidth), 0, captureHeight);
-        rect.top = CameraHelper.clamp((int) (y - areaMultiple / 2 * captureWidth), 0, captureWidth);
-        rect.bottom = CameraHelper.clamp((int) (y + areaMultiple / 2 * captureWidth), 0, captureWidth);
-
-        return rect;
-    }
-
     public static Rect calculateTapArea(float x, float y,
                                         int viewWidth, int viewHeight, float areaMultiple,
                                         PointTransform pointTransform) {
@@ -126,69 +81,10 @@ public class CameraHelper {
         RectF rectF = new RectF(left, top, left + width, top + height);
         pointTransform.matrix.mapRect(rectF);
 
-        return new Rect(Math.round(rectF.left), Math.round(rectF.top), Math.round(rectF.right), Math.round(rectF.bottom));
-    }
-
-    public static Rect calculateTapArea(float x, float y,
-                                        int viewWidth, int viewHeight,
-                                        Rect cropRegion, float areaMultiple, int captureWidth, int captureHeight, int orientation, boolean isFront) {
-        int cropRegionWidth = cropRegion.width();
-        int cropRegionHeight = cropRegion.height();
-        if (orientation == 90 || orientation == 270) {
-            int tmp = captureHeight;
-            captureHeight = captureWidth;
-            captureWidth = tmp;
-        }
-
-        float imageScale, leftMargin = 0.0f, topMargin = 0.0f, tmp;
-        // map screen size to capture size
-        if (captureHeight * viewWidth > captureWidth * viewHeight) {
-            imageScale = viewWidth * 1.0f / captureWidth;
-            topMargin = (captureHeight - viewHeight / imageScale) / 2;
-        } else {
-            imageScale = viewHeight * 1.0f / captureHeight;
-            leftMargin = (captureWidth - viewWidth / imageScale) / 2;
-        }
-
-        x = x / imageScale + leftMargin;
-        y = y / imageScale + topMargin;
-
-        if (isFront) {
-            x = captureWidth - x;
-        }
-
-        if (orientation == 90) {
-            tmp = x;
-            x = y;
-            y = captureHeight - tmp;
-        } else if (orientation == 270) {
-            tmp = x;
-            x = captureWidth - y;
-            y = tmp;
-        }
-
-        // map capture size to SCALER_CROP_REGION
-        if (captureHeight * cropRegionWidth > captureWidth * captureHeight) {
-            imageScale = cropRegionHeight * 1.0f / captureHeight;
-            topMargin = 0;
-            leftMargin = (cropRegionWidth - imageScale * captureWidth) / 2;
-        } else {
-            imageScale = captureWidth * 1.0f / captureWidth;
-            topMargin = (cropRegionHeight - imageScale * captureHeight) / 2;
-            leftMargin = 0;
-        }
-
-
-        x = x * imageScale + leftMargin + cropRegion.left;
-        y = y * imageScale + topMargin + cropRegion.top;
-
-        Rect rect = new Rect();
-        rect.left = clamp((int) (x - areaMultiple / 2 * cropRegionWidth), 0, cropRegionWidth);
-        rect.right = clamp((int) (x + areaMultiple / 2 * cropRegionWidth), 0, cropRegionWidth);
-        rect.top = clamp((int) (y - areaMultiple / 2 * cropRegionHeight), 0, cropRegionHeight);
-        rect.bottom = clamp((int) (y + areaMultiple / 2 * cropRegionHeight), 0, cropRegionHeight);
-
-        return rect;
+        return new Rect(clamp(Math.round(rectF.left),-1000,1000),
+                clamp(Math.round(rectF.top),-1000,1000),
+                clamp(Math.round(rectF.right),-1000,1000),
+                clamp(Math.round(rectF.bottom),-1000,1000));
     }
 
     /**

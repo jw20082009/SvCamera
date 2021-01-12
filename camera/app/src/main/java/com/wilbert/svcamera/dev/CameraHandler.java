@@ -87,9 +87,9 @@ public class CameraHandler extends Handler implements ICameraHandler{
                     switch (status) {
                         case MANUAL: {
                             meterResult = CameraHelper.setMetering(parameters, meterRect, 1000);
-                            focusResult = CameraHelper.setFocus(parameters, focusRect, 1000);
+//                            focusResult = CameraHelper.setFocus(parameters, focusRect, 1000);
                             camera.setParameters(parameters);
-                            CameraHelper.autoFocus(camera);
+//                            CameraHelper.autoFocus(camera);
                         }
                         break;
                         case FACE_EXIST: {
@@ -100,7 +100,7 @@ public class CameraHandler extends Handler implements ICameraHandler{
                         case CENTER_METERING:
                         default: {
                             meterResult = CameraHelper.setMetering(parameters, meterRect, 0);
-                            focusResult = CameraHelper.setFocus(parameters, focusRect, 0);
+//                            focusResult = CameraHelper.setFocus(parameters, focusRect, 0);
                             camera.setParameters(parameters);
                         }
                         break;
