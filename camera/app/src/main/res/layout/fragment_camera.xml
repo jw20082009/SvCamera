@@ -4,10 +4,15 @@
     android:layout_height="match_parent"
     android:background="@android:color/black">
 
-    <android.opengl.GLSurfaceView
+    <com.wilbert.svcamera.FocusGLSurfaceView
         android:id="@+id/gl_surfaceview"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
+
+    <com.wilbert.svcamera.views.FocusView
+        android:id="@+id/focusView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"/>
 
     <LinearLayout
         android:id="@+id/ll_test_view"
@@ -27,7 +32,7 @@
             android:layout_width="match_parent"
             android:layout_height="50dp"
             android:gravity="center"
-            android:text="上调帧率"
+            android:text="fpsRange"
             android:textColor="@android:color/white"
             android:textSize="14dp" />
 
@@ -36,7 +41,16 @@
             android:layout_width="100dp"
             android:layout_height="50dp"
             android:gravity="left|center_vertical"
-            android:text="上调帧率"
+            android:text="current fps"
+            android:textColor="@android:color/white"
+            android:textSize="14dp" />
+
+        <TextView
+            android:id="@+id/tv_switch_fps"
+            android:layout_width="100dp"
+            android:layout_height="50dp"
+            android:gravity="left|center_vertical"
+            android:text="switch fps"
             android:textColor="@android:color/white"
             android:textSize="14dp" />
 

@@ -1,8 +1,13 @@
 package com.wilbert.svcamera.dev;
 
 import android.content.Context;
+import android.graphics.ImageFormat;
+import android.graphics.Point;
+import android.graphics.PointF;
+import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
@@ -12,8 +17,10 @@ import android.view.WindowManager;
 
 import androidx.annotation.NonNull;
 
-import com.wilbert.svcamera.CameraFragment;
 import com.wilbert.svcamera.IPreviewListener;
+import com.wilbert.svcamera.metering.Metering;
+import com.wilbert.svcamera.metering.MeteringCallback;
+import com.wilbert.svcamera.metering.MeteringDelegate;
 
 import java.io.IOException;
 import java.util.List;
@@ -24,13 +31,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * @Date 2020/12/15 10:00
  * @email jiangwang.wilbert@bigo.sg
  **/
+@SuppressWarnings("deprecation")
 public class CameraHandler extends Handler implements ICameraHandler{
     private final String TAG = "CameraHandler";
     public static final int MSG_CAMERA_START = 0x01;
 
     public static final int MSG_CAMERA_PREVIEW = 0x02;
 
-    public static final int MSG_DOWN_FPS = 0X03;
+    public static final int MSG_SWITCH_FPS = 0X03;
 
     public static final int MSG_SWITCH_STABILIZATION = 0x04;
 
@@ -39,6 +47,9 @@ public class CameraHandler extends Handler implements ICameraHandler{
     public static final int MSG_ZOOM = 0x06;
 
     public static final int MSG_RELEASE = 0X07;
+
+    public static final int MSG_REQUEST_FOCUS = 0x08;
+
     public static int currentCameraId = -1;
     Camera camera;
     Camera.CameraInfo info;
@@ -48,15 +59,95 @@ public class CameraHandler extends Handler implements ICameraHandler{
     boolean mCameraPreviewing = false;
     int mDefaultZoom = 1;
     int mMaxZoom = 1;
-    int mPreviewWidth = 1280;
-    int mPreviewHeight = 720;
-    int mFacing = Camera.CameraInfo.CAMERA_FACING_FRONT;
-    int[] targetFpsRange;
+    int mPreviewWidth = 640;
+    int mPreviewHeight = 480;
+    int mFacing = Camera.CameraInfo.CAMERA_FACING_BACK;
+    int mCurrentFpsIndex;
+    int mOrientation = 0;
     List<int[]> mFpsRange;
     ICameraListener mListener;
     Object mLock = new Object();
     Context mContext;
     SurfaceTexture mSurfaceTexture;
+
+    private MeteringDelegate mMeteringDelegate = new MeteringDelegate(new MeteringCallback() {
+
+        private int mCurrentSwitchTimes = 0;
+
+        @Override
+        public void onMeteringChanged(Metering oldMetering, Metering newMetering) {
+            if(camera != null && parameters != null && newMetering != null){
+                Rect meterRect = newMetering.getMeterRect();
+                Rect focusRect = newMetering.getFocusRect();
+                Metering.ExposureStatus status = newMetering.getState();
+                Log.e(TAG,"onMeteringChanged:"+oldMetering.getState().name()+";"+newMetering.getState().name());
+                try{
+                    boolean meterResult = false;
+                    boolean focusResult = false;
+                    switch (status) {
+                        case MANUAL: {
+                            meterResult = CameraHelper.setMetering(parameters, meterRect, 1000);
+                            focusResult = CameraHelper.setFocus(parameters, focusRect, 1000);
+                            camera.setParameters(parameters);
+                            CameraHelper.autoFocus(camera);
+                        }
+                        break;
+                        case FACE_EXIST: {
+                            meterResult = CameraHelper.setMetering(parameters, meterRect, 1000);
+                            camera.setParameters(parameters);
+                        }
+                        break;
+                        case CENTER_METERING:
+                        default: {
+                            meterResult = CameraHelper.setMetering(parameters, meterRect, 0);
+                            focusResult = CameraHelper.setFocus(parameters, focusRect, 0);
+                            camera.setParameters(parameters);
+                        }
+                        break;
+                    }
+                    reportSwitchEvent(oldMetering,newMetering,getCameraStatResult(meterResult,focusResult));
+                }catch (Exception e){
+                    Log.e(TAG,"changeState:"+status.name()+";rect:"+meterRect+";"+focusRect);
+                    if(MeteringDelegate.sDebug){
+                        throw new RuntimeException(e);
+                    }
+                }
+            }
+        }
+
+        @Override
+        public void onMessage(String msg) {
+            Log.e(TAG,"onMessage:"+msg);
+        }
+
+        private int getCameraStatResult(boolean meterResult,boolean focusResult){
+            int camResult = 0;
+            camResult = meterResult ? camResult + 1 : camResult;
+            camResult = focusResult ? camResult + 1 : camResult;
+            return camResult;
+        }
+
+        private void reportSwitchEvent(Metering oldMetering,Metering metering,int meterResult) {
+            mCurrentSwitchTimes++;
+            if (metering == null || oldMetering == null || oldMetering.getState() != metering.getState() || metering.getState() == Metering.ExposureStatus.MANUAL) {
+                //手动测光或者测光模式发生改变时上报
+                int oldM = oldMetering == null ? Metering.ExposureStatus.CENTER_METERING.ordinal() : oldMetering.getState().ordinal();
+                int newM = metering == null ? Metering.ExposureStatus.CENTER_METERING.ordinal() : metering.getState().ordinal();
+                int manual = oldMetering != null ? oldMetering.getManualType().ordinal() :
+                        (metering != null ? metering.getManualType().ordinal() : Metering.ExposureStatus.CENTER_METERING.ordinal());
+                Log.e(TAG,"[reportSwitchEvent] oldM:"+oldM+";newM:"+newM+";manual:"+manual+";switchTimes:"+mCurrentSwitchTimes+";meterResult:"+meterResult);
+                mCurrentSwitchTimes = 0;
+            }
+        }
+    });
+
+    FrameProcessor mFrameProcessor = new FrameProcessor(){
+        @Override
+        public void onPreviewFrame(byte[] data, Camera camera) {
+            mMeteringDelegate.onFrameAvailable(data, mPreviewWidth, mPreviewHeight);
+            super.onPreviewFrame(data, camera);
+        }
+    };
 
     public CameraHandler(Context context,Looper looper){
         super(looper);
@@ -75,6 +166,7 @@ public class CameraHandler extends Handler implements ICameraHandler{
             sendEmptyMessage(MSG_CAMERA_START);
             Log.e(TAG,"MSG_CAMERA_PREVIEW 2");
         }
+
         return new IPreviewListener() {
             @Override
             public void onSurfaceCreated(SurfaceTexture surfaceTexture) {
@@ -106,16 +198,44 @@ public class CameraHandler extends Handler implements ICameraHandler{
     public void handleMessage(@NonNull Message msg) {
         super.handleMessage(msg);
         switch (msg.what){
+            case MSG_REQUEST_FOCUS:{
+                Bundle data = msg.getData();
+                int touchX = data.getInt("touchX");
+                int touchY = data.getInt("touchY");
+                int viewWidth = data.getInt("viewWidth");
+                int viewHeight = data.getInt("viewHeight");
+                if(camera == null || parameters == null){
+                    return;
+                }
+                PointTransform pointTransform = new PointTransform();
+                int orientation = mOrientation;
+                int captureWidth = mPreviewWidth;
+                int captureHeight = mPreviewHeight;
+                if (viewWidth > 0 && viewHeight > 0) {
+                    CameraHelper.getPointTransform(pointTransform, orientation, captureWidth, captureHeight, mFacing == Camera.CameraInfo.CAMERA_FACING_FRONT,
+                            viewWidth, viewHeight);
+                }
+                float areaMultiple = 1.5f;
+                Rect meterRect = CameraHelper.calculateTapArea(touchX, touchY, viewWidth, viewHeight, 1.5f, pointTransform);
+                Rect focusRect = CameraHelper.calculateTapArea(touchX,touchY,viewWidth,viewHeight,1.0f,pointTransform);
+                Point centerPoint = CameraHelper.transFormPoint(new PointF(touchX,touchY),orientation,captureWidth,captureHeight,viewWidth,viewHeight);
+                boolean manualFocus = mMeteringDelegate.onManualFocus(meterRect,focusRect,centerPoint);
+                Log.e(TAG, "requestFocusMetering:" + manualFocus + ",touchX:" + touchX + ";touchY:" +
+                        touchY + ";viewWidth:" + viewWidth + ";viewHeight:" + viewHeight + ";areaMultiple:" + areaMultiple);
+            }
+                break;
             case MSG_RELEASE:
             {
                 if(camera != null){
-                    try {
-                        camera.setPreviewTexture(null);
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
+                    camera.stopPreview();
+//                    try {
+//                        camera.setPreviewTexture(null);
+//                    } catch (IOException e) {
+//                        e.printStackTrace();
+//                    }
                     camera.release();
                     camera = null;
+                    parameters = null;
                 }
                 mCameraOpened.set(false);
                 getLooper().quit();
@@ -153,23 +273,17 @@ public class CameraHandler extends Handler implements ICameraHandler{
                 }
             }
             break;
-            case MSG_DOWN_FPS:{
-                if(!mCameraOpened.get()){
+            case MSG_SWITCH_FPS:{
+                if(!mCameraOpened.get() || mFpsRange == null){
                     return;
                 }
-//                    int[] ranges = (int[]) msg.obj;
-
-//                    parameters.setPreviewFpsRange(ranges[0],ranges[1]);
+                int[] fpsRange = mFpsRange.get(mCurrentFpsIndex>=mFpsRange.size()?mCurrentFpsIndex%mFpsRange.size():mCurrentFpsIndex);
+                parameters.setPreviewFpsRange(fpsRange[0],fpsRange[1]);
                 camera.setParameters(parameters);
-//                    final int[] fpsRange = new int[2];
-//                    parameters.getPreviewFpsRange(fpsRange);
-//                    mTvDown.post(new Runnable() {
-//                        @Override
-//                        public void run() {
-//                            mTvDown.setText(fpsRange[0]+"*"+fpsRange[1]);
-//                        }
-//                    });
-//                    Log.e(TAG,"fpsRange[0]:"+fpsRange[0]+";fpsRange[1]:"+fpsRange[1]);
+                mCurrentFpsIndex=++mCurrentFpsIndex%mFpsRange.size();
+                if(mListener != null){
+                    mListener.onSwitchFps(fpsRange);
+                }
             }
             break;
             case MSG_CAMERA_START:
@@ -177,8 +291,10 @@ public class CameraHandler extends Handler implements ICameraHandler{
                     return;
                 if(camera != null){
                     camera.stopPreview();
-                    camera.setPreviewCallback(null);
+//                    camera.setPreviewCallback(null);
                     camera.release();
+                    camera = null;
+                    parameters = null;
                     mCameraOpened.set(false);
                     synchronized (mLock) {
                         mCameraPreviewing = false;
@@ -188,6 +304,7 @@ public class CameraHandler extends Handler implements ICameraHandler{
                 if(cameraIndexer == null){
                     cameraIndexer = new CameraIndexer();
                     cameraIndexer.init();
+                    cameraIndexer.initCamera2(mContext);
                 }
                 int cameraId = cameraIndexer.selectCameraId(mFacing);
                 mFacing = (mFacing+1)%2;
@@ -200,10 +317,12 @@ public class CameraHandler extends Handler implements ICameraHandler{
                 mDefaultZoom = parameters.getZoom();
                 mMaxZoom = parameters.getMaxZoom();
                 parameters.setPreviewSize(mPreviewWidth,mPreviewHeight);
+                parameters.setPreviewFormat(ImageFormat.NV21);
                 mFpsRange = parameters.getSupportedPreviewFpsRange();
-                final String str = "CameraId:"+cameraId+";"+numToString(mFpsRange);
-                Log.e(TAG,str);
                 camera.setParameters(parameters);
+                final String str = "CameraId:"+cameraId+";"+numToString(mFpsRange);
+                Log.e(TAG,"getMaxNumFocusAreas0;" +parameters.getMaxNumFocusAreas()+";"+parameters.getMaxNumMeteringAreas());
+                Log.e(TAG,str);
                 mListener.onCameraOpened(str);
                 mCameraOpened.set(true);
                 if(!hasMessages(MSG_CAMERA_PREVIEW)){
@@ -220,7 +339,7 @@ public class CameraHandler extends Handler implements ICameraHandler{
                         break;
                     }else{
                         camera.stopPreview();
-                        camera.setPreviewCallback(null);
+//                        camera.setPreviewCallback(null);
                     }
                     if(!_isInit()){
                         try {
@@ -231,12 +350,20 @@ public class CameraHandler extends Handler implements ICameraHandler{
                     }
                 }
                 try {
-                    cameraIndexer.initCamera2(mContext);
-                    int orientation = calcPreviewOrientation(mContext,info);
-                    Log.e(TAG,"orientation:" + orientation);
-                    camera.setDisplayOrientation(orientation);
+                    mOrientation = calcPreviewOrientation(mContext,info);
+                    Log.e(TAG,"orientation:" + mOrientation);
+                    Log.e(TAG,"getMaxNumFocusAreas1;" +parameters.getMaxNumFocusAreas()+";"+parameters.getMaxNumMeteringAreas());
+                    camera.setDisplayOrientation(mOrientation);
                     camera.setPreviewTexture(mSurfaceTexture);
+                    Log.e(TAG,"getMaxNumFocusAreas1;" +parameters.getMaxNumFocusAreas()+";"+parameters.getMaxNumMeteringAreas());
+                    if(mFrameProcessor != null){
+                        byte[] frameData = new byte[mPreviewWidth*mPreviewHeight * 3/2];
+                        camera.addCallbackBuffer(frameData);
+                        camera.setPreviewCallbackWithBuffer(mFrameProcessor);
+                    }
                     camera.startPreview();
+                    mMeteringDelegate.startFaceDetect(camera);
+                    Log.e(TAG,"getMaxNumFocusAreas2;" +parameters.getMaxNumFocusAreas()+";"+parameters.getMaxNumMeteringAreas());
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
@@ -266,6 +393,13 @@ public class CameraHandler extends Handler implements ICameraHandler{
     }
 
     @Override
+    public void switchFps() {
+        if(!hasMessages(CameraHandler.MSG_SWITCH_FPS)){
+            sendEmptyMessage(CameraHandler.MSG_SWITCH_FPS);
+        }
+    }
+
+    @Override
     public void switchStabilization() {
         if(!hasMessages(CameraHandler.MSG_SWITCH_STABILIZATION)){
             sendEmptyMessage(CameraHandler.MSG_SWITCH_STABILIZATION);
@@ -286,6 +420,26 @@ public class CameraHandler extends Handler implements ICameraHandler{
             msg.arg1 = progress;
             msg.sendToTarget();
         }
+    }
+
+    @Override
+    public void setFrameProcessor(FrameProcessor processor) {
+        mFrameProcessor = processor;
+    }
+
+    @Override
+    public void requestFocus(float touchX, float touchY, int viewWidth, int viewHeight) {
+        if(!hasMessages(CameraHandler.MSG_ZOOM)){
+            Message msg = obtainMessage(CameraHandler.MSG_REQUEST_FOCUS);
+            Bundle data = new Bundle();
+            data.putInt("touchX", (int) touchX);
+            data.putInt("touchY", (int) touchY);
+            data.putInt("viewWidth",viewWidth);
+            data.putInt("viewHeight",viewHeight);
+            msg.setData(data);
+            msg.sendToTarget();
+        }
+
     }
 
     private int calcPreviewOrientation(Context context, Camera.CameraInfo info){
@@ -322,3 +476,4 @@ public class CameraHandler extends Handler implements ICameraHandler{
         return mCameraOpened.get();
     }
 }
+

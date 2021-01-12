@@ -7,5 +7,6 @@ package com.wilbert.svcamera.dev;
  **/
 public interface ICameraListener {
     void onSwitchStabilization(int status);//-1: not support, 0: off, 1: on
+    void onSwitchFps(int[] fpsRange);
     void onCameraOpened(String msg);
 }

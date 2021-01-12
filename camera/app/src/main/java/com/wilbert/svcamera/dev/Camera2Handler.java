@@ -78,6 +78,7 @@ public class Camera2Handler extends Handler implements ICameraHandler {
     CameraDevice mCameraDevice;
     CameraCaptureSession mPreviewSession;
     CameraCharacteristics mCameraCharacteristics;
+    List<int[]> mFpsRanges;
 
     public Camera2Handler(Context context, Looper looper) {
         super(looper);
@@ -136,6 +137,11 @@ public class Camera2Handler extends Handler implements ICameraHandler {
     }
 
     @Override
+    public void switchFps() {
+
+    }
+
+    @Override
     public void switchStabilization() {
         if (!hasMessages(MSG_SWITCH_STABILIZATION)) {
             sendEmptyMessage(MSG_SWITCH_STABILIZATION);
@@ -156,6 +162,16 @@ public class Camera2Handler extends Handler implements ICameraHandler {
             msg.arg1 = progress;
             msg.sendToTarget();
         }
+    }
+
+    @Override
+    public void setFrameProcessor(FrameProcessor processor) {
+
+    }
+
+    @Override
+    public void requestFocus(float touchX, float touchY, int viewWidth, int viewHeight) {
+
     }
 
     private int getFacing() {
