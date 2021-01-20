@@ -12,7 +12,7 @@ import android.util.Log;
 public abstract class Metering implements IMetering {
     private final String TAG = "Metering";
     public enum ExposureStatus {
-        FACE_EXIST, CENTER_METERING, MANUAL;
+        FACE_EXIST, CENTER_METERING, MANUAL,DEFAULT;
     }
     protected final int FACE_DIFFERENT_VAL = 20;
     protected final MeteringController mController;
@@ -36,7 +36,8 @@ public abstract class Metering implements IMetering {
             //当前正处于手动模式
             return this;
         }
-        if(hasFace != mHasFace || isRectDifferent(rect)){
+        if(hasFace != mHasFace){
+            //只走人脸切换时候的逻辑
             mFaceChanged = true;
             mHasFace = hasFace;
             mMeterRect = rect;
@@ -80,28 +81,33 @@ public abstract class Metering implements IMetering {
         return mMeterType;
     }
 
+    public Point getManualCenter(){
+        return mManualCenter;
+    }
+
     protected void clear() {
     }
 
     private boolean isRectDifferent(Rect rect) {
-        if (rect == null) {
-            Log.e(TAG,"[isFaceDifferent] rect == null");
-            return false;
-        }
-        if (mMeterRect == null) {
-            return true;
-        }
-        if (Math.abs(mMeterRect.left - rect.left) > FACE_DIFFERENT_VAL ||
-                Math.abs(mMeterRect.top - rect.top) > FACE_DIFFERENT_VAL ||
-                Math.abs(mMeterRect.right - rect.right) > FACE_DIFFERENT_VAL ||
-                Math.abs(mMeterRect.bottom - rect.bottom) > FACE_DIFFERENT_VAL){
-            return true;
-        }else{
-            if(MeteringDelegate.sDebug) {
-                Log.e(TAG, "[isFaceDifferent] rect:" + rect + ";mFaceRect:" + mMeterRect);
-            }
-        }
-        return false;
+        return true;
+//        if (rect == null) {
+//            Log.e(TAG,"[isFaceDifferent] rect == null");
+//            return false;
+//        }
+//        if (mMeterRect == null) {
+//            return true;
+//        }
+//        if (Math.abs(mMeterRect.left - rect.left) > FACE_DIFFERENT_VAL ||
+//                Math.abs(mMeterRect.top - rect.top) > FACE_DIFFERENT_VAL ||
+//                Math.abs(mMeterRect.right - rect.right) > FACE_DIFFERENT_VAL ||
+//                Math.abs(mMeterRect.bottom - rect.bottom) > FACE_DIFFERENT_VAL){
+//            return true;
+//        }else{
+//            if(MeteringDelegate.sDebug) {
+//                Log.e(TAG, "[isFaceDifferent] rect:" + rect + ";mFaceRect:" + mMeterRect);
+//            }
+//        }
+//        return false;
     }
 
 }

@@ -13,182 +13,180 @@ import java.util.List;
 
 public class CameraHelper {
     private static final String TAG = "CameraHelper";
+    public static float DEFAULT_AREA_MULTIPLE = 0.15f;
 
-    public static Point transFormPoint(PointF point, int orientation, int viewWidth, int viewHeight, int captureWidth, int captureHeight) {
+    public static PointF transFormPoint(PointF point, int orientation,boolean facingFront, int viewWidth, int viewHeight, int captureWidth, int captureHeight) {
         if (point == null || viewWidth <= 0 || viewHeight <= 0 || captureWidth <= 0 || captureHeight <= 0) {
             return null;
         }
-        if (Math.abs(1.0f * viewWidth / viewHeight - 1.0f * captureWidth / viewHeight) > 0.1) {
-            Log.e(TAG, "[transFormPoint] ratio not the same");
-            return new Point((int)point.x,(int)point.y);
+        float ratioView = 1.0f * viewWidth / viewHeight;
+        if (orientation == 90 || orientation == 270) {
+            int temp = captureWidth;
+            captureWidth = captureHeight;
+            captureHeight = temp;
         }
-        int width = (orientation == 0 || orientation == 180) ? captureWidth : captureHeight;
-        float ratio = 1.0f * captureWidth / viewWidth;
-        Point result = new Point((int) (point.x * ratio),(int) (point.y * ratio));
+        float ratioCapture = 1.0f * captureWidth / captureHeight;
+        float ratio = 1.0f;
+        if (ratioCapture > ratioView) {
+            ratio = 1.0f * captureHeight / viewHeight;
+            float w = viewWidth * ratio;
+            float leftOffset = (captureWidth - w) / 2.0f;
+            point.x = leftOffset + point.x * ratio;
+            point.y = point.y * ratio;
+        } else {
+            ratio = 1.0f * captureWidth / viewWidth;
+            float h = viewHeight * ratio;
+            float topOffset = (captureHeight - h) / 2.0f;
+            point.y = point.y * ratio + topOffset;
+            point.x = point.x * ratio;
+        }
+        float points[] = new float[]{point.x, point.y};//计算过画面裁剪的point
+
+        Matrix matrix = new Matrix();
+        matrix.setScale(facingFront?-1:1,1,captureWidth/2,captureHeight/2);
+
+        int rotation = 360 - orientation;//逆转camera旋转角度
+        matrix.postRotate(rotation);
+
+        int transX = captureWidth;//画面左上角移动到原点
+        int transY = captureHeight;
+        switch (rotation){
+            case 90:{
+                transX = captureHeight;
+                transY = 0;
+            }
+            break;
+            case 180:{
+                transX = captureWidth;
+                transY = captureHeight;
+            }
+            break;
+            case 270:{
+                transX = 0;
+                transY = captureWidth;
+            }
+            break;
+        }
+        matrix.postTranslate(transX,transY);
+
+        matrix.mapPoints(points);
+        PointF result = new PointF(points[0], points[1]);
         return result;
     }
 
-    /**
-     *
-     */
-    public static void getPointTransform(PointTransform pointTransform,
-                                         int orientation, int captureWidth, int captureHeight,
-                                         boolean isFront, int viewWidth, int viewHeight) {
+    public static Rect revertMeterRect(Rect rect, int orientation,boolean facingFront, int viewWidth, int viewHeight, int captureWidth, int captureHeight){
+        if (rect == null || viewWidth <= 0 || viewHeight <= 0 || captureWidth <= 0 || captureHeight <= 0) {
+            return null;
+        }
+        float left =1.0f * captureWidth * (rect.left+1000)/2000;
+        float top = 1.0f * captureHeight * (rect.top + 1000)/2000;
+        float right =1.0f * captureWidth* (rect.right + 1000)/2000;
+        float bottom =1.0f* captureHeight *(rect.bottom + 1000)/2000;
+        RectF rectF = new RectF(left,top,right,bottom);
         Matrix matrix = new Matrix();
-        matrix.setRotate(orientation); // Need mirror for front camera.
-        matrix.postScale(isFront ? -1 : 1, 1);
-
-        // 根据摄像头宽高和GLSurfaceView的宽高计算放大后的大小和位置
-        int height = (orientation == 0 || orientation == 180) ? captureHeight : captureWidth;
-        int width = (orientation == 0 || orientation == 180) ? captureWidth : captureHeight;
-
-        if (viewWidth > width) {  // 扩充宽度
-            height = viewWidth * height / width;
-            width = viewWidth;
+        matrix.setScale(facingFront?-1:1,1,captureWidth/2,captureHeight/2);
+        int rotation = 360 - orientation;//逆转camera旋转角度
+        int transX = captureWidth;//画面左上角移动到原点
+        int transY = captureHeight;
+        switch (rotation){
+            case 90:{
+                transX = -1* captureHeight;
+                transY = 0;
+            }
+            break;
+            case 180:{
+                transX = -1* captureWidth;
+                transY = -1* captureHeight;
+            }
+            break;
+            case 270:{
+                transX = 0;
+                transY = -1* captureWidth;
+            }
+            break;
         }
+        matrix.postTranslate(transX,transY);
+        matrix.postRotate(-1* rotation);
+        matrix.mapRect(rectF);
 
-        if (viewHeight > height) { // 扩充高度
-            width = viewHeight * width / height;
-            height = viewHeight;
-        }
-        int leftMargin = (width - viewWidth) / 2;
-        int topMargin = (height - viewHeight) / 2;
-
-        int scaledPreviewWidth = width;
-        int scaledPreviewHeight = height;
-
-        matrix.postScale(scaledPreviewWidth / 2000f, scaledPreviewHeight / 2000f);
-        matrix.postTranslate(scaledPreviewWidth / 2f, scaledPreviewHeight / 2f);
-        matrix.invert(matrix);
-        pointTransform.matrix = matrix;
-        pointTransform.leftMargin = leftMargin;
-        pointTransform.topMargin = topMargin;
-        pointTransform.scaledPreviewWidth = scaledPreviewWidth;
-        pointTransform.scaledPreviewHeight = scaledPreviewHeight;
-    }
-
-    // 前置摄像头人脸测光策略，获取用户手动触摸区域在最终分辨率的相对位置的矩形
-    public static Rect calculateTapArea(float x, float y, int viewWidth, int viewHeight,
-                                        float areaMultiple, int captureWidth, int captureHeight, int orientation, boolean isFront) {
+        float ratioView = 1.0f * viewWidth / viewHeight;
         if (orientation == 90 || orientation == 270) {
-            int tmp = captureHeight;
-            captureHeight = captureWidth;
-            captureWidth = tmp;
+            int temp = captureWidth;
+            captureWidth = captureHeight;
+            captureHeight = temp;
         }
-
-        float imageScale, leftMargin = 0.0f, topMargin = 0.0f, tmp;
-        // map screen size to capture size
-        if (captureHeight * viewWidth > captureWidth * viewHeight) {
-            imageScale = viewWidth * 1.0f / captureWidth;
-            topMargin = (captureHeight - viewHeight / imageScale) / 2;
+        float ratioCapture = 1.0f * captureWidth / captureHeight;
+        float ratio = 1.0f;
+        if (ratioCapture > ratioView) {
+            ratio = 1.0f * captureHeight / viewHeight;
+            float w = viewWidth * ratio;
+            float leftOffset = (captureWidth - w) / 2.0f;
+            rectF.left = (int) (1.0f * (rectF.left - leftOffset)/ ratio);
+            rectF.right = (int) (1.0f * (rectF.right - leftOffset)/ ratio);
+            rectF.top = (int) (1.0f * rectF.top / ratio);
+            rectF.bottom = (int) (1.0f * rectF.bottom / ratio);
         } else {
-            imageScale = viewHeight * 1.0f / captureHeight;
-            leftMargin = (captureWidth - viewWidth / imageScale) / 2;
+            ratio = 1.0f * captureWidth / viewWidth;
+            float h = viewHeight * ratio;
+            float topOffset = (captureHeight - h) / 2.0f;
+            rectF.top = (int) (1.0f * (rectF.top - topOffset) / ratio);
+            rectF.bottom = (int) (1.0f * (rectF.bottom - topOffset) / ratio);
+            rectF.left = (int) (1.0f * rectF.left / ratio);
+            rectF.right = (int) (1.0f * rectF.right / ratio);
         }
-
-        x = x / imageScale + leftMargin;
-        y = y / imageScale + topMargin;
-
-        if (isFront) {
-            x = captureWidth - x;
-        }
-
-        if (orientation == 90) {
-            tmp = x;
-            x = y;
-            y = captureHeight - tmp;
-        } else if (orientation == 270) {
-            tmp = x;
-            x = captureWidth - y;
-            y = tmp;
-        }
-
-        Rect rect = new Rect();
-        rect.left = CameraHelper.clamp((int) (x - areaMultiple / 2 * captureWidth), 0, captureHeight);
-        rect.right = CameraHelper.clamp((int) (x + areaMultiple / 2 * captureWidth), 0, captureHeight);
-        rect.top = CameraHelper.clamp((int) (y - areaMultiple / 2 * captureWidth), 0, captureWidth);
-        rect.bottom = CameraHelper.clamp((int) (y + areaMultiple / 2 * captureWidth), 0, captureWidth);
-
-        return rect;
+        return new Rect((int)rectF.left,(int)rectF.top,(int)rectF.right,(int)rectF.bottom);
     }
 
-    public static Rect calculateTapArea(float x, float y,
-                                        int viewWidth, int viewHeight, float areaMultiple,
-                                        PointTransform pointTransform) {
-        x = x + pointTransform.leftMargin;
-        y = y + pointTransform.topMargin;
-        int width = (int) (viewWidth * areaMultiple / 10);
-        int height = (int) (viewHeight * areaMultiple / 10);
+    public Point revertMeterPoint(Point point, int orientation,boolean facingFront, int viewWidth, int viewHeight, int captureWidth, int captureHeight){
+        if (point == null || viewWidth <= 0 || viewHeight <= 0 || captureWidth <= 0 || captureHeight <= 0) {
+            return null;
+        }
+        float points[] = new float[]{point.x, point.y};//计算过画面裁剪的point
 
-        int left = clamp((int) x - width / 2, 0, pointTransform.scaledPreviewWidth - width);
-        int top = clamp((int) y - height / 2, 0, pointTransform.scaledPreviewHeight - height);
-
-        RectF rectF = new RectF(left, top, left + width, top + height);
-        pointTransform.matrix.mapRect(rectF);
-
-        return new Rect(Math.round(rectF.left), Math.round(rectF.top), Math.round(rectF.right), Math.round(rectF.bottom));
+        return point;
     }
 
-    public static Rect calculateTapArea(float x, float y,
-                                        int viewWidth, int viewHeight,
-                                        Rect cropRegion, float areaMultiple, int captureWidth, int captureHeight, int orientation, boolean isFront) {
-        int cropRegionWidth = cropRegion.width();
-        int cropRegionHeight = cropRegion.height();
-        if (orientation == 90 || orientation == 270) {
-            int tmp = captureHeight;
-            captureHeight = captureWidth;
-            captureWidth = tmp;
+    /**
+     * 根据手动测光的点在camera回调画面上的对应位置计算矩形(比例未缩放到-1000~1000)
+     * @param manualCapturePoint 手动测光的点在camera回调画面上的对应位置
+     * @param captureWidth       camera回调画面宽度
+     * @param captureHeight      camera回调画面高度
+     * @param areaMultiple       测光矩形最大边占画面的比例
+     * @return
+     */
+    public static RectF calcTapRect(PointF manualCapturePoint,int captureWidth,int captureHeight,float areaMultiple){
+        float compensate = 1.5f;
+        int rectWidth = captureWidth<captureHeight?(int) (captureWidth * compensate * areaMultiple):(int)(captureWidth * areaMultiple);
+        int rectHeight = captureWidth<captureHeight?(int) (captureHeight * areaMultiple):(int) (captureHeight * compensate * areaMultiple);
+        float halfWidth = rectWidth/2.0f;
+        float halfHeight = rectHeight/2.0f;
+        RectF rectF = new RectF(clamp(manualCapturePoint.x - halfWidth,0,captureWidth),
+                (int)clamp(manualCapturePoint.y- halfHeight,0,captureHeight),
+                (int)clamp(manualCapturePoint.x + halfWidth,0,captureWidth),
+                (int)clamp(manualCapturePoint.y +halfHeight,0,captureHeight));
+        return rectF;
+    }
+
+    /**
+     * 根据手动测光的点在camera回调画面上的对应位置计算矩形
+     * @param manualCapturePoint    手动测光的点在camera回调画面上的对应位置
+     * @param captureWidth          camera回调画面宽度
+     * @param captureHeight         camera回调画面高度
+     * @param areaMultiple          测光矩形最大边占画面的比例
+     * @return
+     */
+    public static Rect calcMeterRect(PointF manualCapturePoint,int captureWidth,int captureHeight,float areaMultiple){
+        if(manualCapturePoint == null || captureWidth<= 0 || captureHeight <= 0 || areaMultiple<= 0){
+            return null;
         }
-
-        float imageScale, leftMargin = 0.0f, topMargin = 0.0f, tmp;
-        // map screen size to capture size
-        if (captureHeight * viewWidth > captureWidth * viewHeight) {
-            imageScale = viewWidth * 1.0f / captureWidth;
-            topMargin = (captureHeight - viewHeight / imageScale) / 2;
-        } else {
-            imageScale = viewHeight * 1.0f / captureHeight;
-            leftMargin = (captureWidth - viewWidth / imageScale) / 2;
-        }
-
-        x = x / imageScale + leftMargin;
-        y = y / imageScale + topMargin;
-
-        if (isFront) {
-            x = captureWidth - x;
-        }
-
-        if (orientation == 90) {
-            tmp = x;
-            x = y;
-            y = captureHeight - tmp;
-        } else if (orientation == 270) {
-            tmp = x;
-            x = captureWidth - y;
-            y = tmp;
-        }
-
-        // map capture size to SCALER_CROP_REGION
-        if (captureHeight * cropRegionWidth > captureWidth * captureHeight) {
-            imageScale = cropRegionHeight * 1.0f / captureHeight;
-            topMargin = 0;
-            leftMargin = (cropRegionWidth - imageScale * captureWidth) / 2;
-        } else {
-            imageScale = captureWidth * 1.0f / captureWidth;
-            topMargin = (cropRegionHeight - imageScale * captureHeight) / 2;
-            leftMargin = 0;
-        }
-
-
-        x = x * imageScale + leftMargin + cropRegion.left;
-        y = y * imageScale + topMargin + cropRegion.top;
-
-        Rect rect = new Rect();
-        rect.left = clamp((int) (x - areaMultiple / 2 * cropRegionWidth), 0, cropRegionWidth);
-        rect.right = clamp((int) (x + areaMultiple / 2 * cropRegionWidth), 0, cropRegionWidth);
-        rect.top = clamp((int) (y - areaMultiple / 2 * cropRegionHeight), 0, cropRegionHeight);
-        rect.bottom = clamp((int) (y + areaMultiple / 2 * cropRegionHeight), 0, cropRegionHeight);
-
-        return rect;
+        RectF captureRect = calcTapRect(manualCapturePoint,captureWidth,captureHeight,areaMultiple);
+        int left = (int) (2000 * captureRect.left/captureWidth - 1000);
+        int top = (int) (2000 * captureRect.top / captureHeight - 1000);
+        int right = (int) (2000 * captureRect.right / captureWidth - 1000);
+        int bottom = (int) (2000 * captureRect.bottom / captureHeight - 1000);
+        Rect meterRect = new Rect(left,top,right,bottom);
+        Log.e(TAG,"calcMeterRect:"+meterRect);
+        return meterRect;
     }
 
     /**
@@ -204,19 +202,29 @@ public class CameraHelper {
         return value;
     }
 
+    /**
+     *
+     */
+    public static float clamp(float value, float min, float max) {
+        if (value > max) {
+            return max;
+        }
+        if (value < min) {
+            return min;
+        }
+        return value;
+    }
+
     public static boolean setMetering(Camera.Parameters parameters, Rect rect, int weight) {
-        if(parameters == null || rect == null){
+        if (parameters == null || rect == null) {
             return false;
         }
         boolean result = false;
-        if(parameters.getMaxNumMeteringAreas() > 0){
+        if (parameters.getMaxNumMeteringAreas() > 0) {
             List<Camera.Area> areas = new ArrayList<>();
             areas.add(new Camera.Area(rect, weight));
             parameters.setMeteringAreas(areas);
             result = true;
-        }
-        if (parameters.isAutoExposureLockSupported()) {
-            parameters.setAutoExposureLock(false);
         }
         if (parameters.isAutoExposureLockSupported()) {
             parameters.setAutoExposureLock(false);
@@ -228,11 +236,11 @@ public class CameraHelper {
     }
 
     public static boolean setFocus(Camera.Parameters parameters, Rect rect, int weight) {
-        if(parameters == null || rect == null){
+        if (parameters == null || rect == null) {
             return false;
         }
         boolean result = false;
-        if(parameters.getMaxNumFocusAreas() > 0){
+        if (parameters.getMaxNumFocusAreas() > 0) {
             List<Camera.Area> focusAreas = new ArrayList<Camera.Area>();
             focusAreas.add(new Camera.Area(rect, weight));
             parameters.setFocusAreas(focusAreas);

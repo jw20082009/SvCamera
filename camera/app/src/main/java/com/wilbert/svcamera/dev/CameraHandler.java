@@ -17,11 +17,18 @@ import android.view.WindowManager;
 
 import androidx.annotation.NonNull;
 
+import com.wilbert.svcamera.CameraActivity;
 import com.wilbert.svcamera.IPreviewListener;
+import com.wilbert.svcamera.metering.CameraHelper;
 import com.wilbert.svcamera.metering.Metering;
 import com.wilbert.svcamera.metering.MeteringCallback;
 import com.wilbert.svcamera.metering.MeteringDelegate;
+import com.wilbert.svcamera.metering.PointTransform;
 
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -61,9 +68,12 @@ public class CameraHandler extends Handler implements ICameraHandler{
     int mMaxZoom = 1;
     int mPreviewWidth = 640;
     int mPreviewHeight = 480;
+    int mViewWidth = 0;
+    int mViewHeight = 0;
     int mFacing = Camera.CameraInfo.CAMERA_FACING_BACK;
     int mCurrentFpsIndex;
     int mOrientation = 0;
+    int mCameraOrientation = 0;
     List<int[]> mFpsRange;
     ICameraListener mListener;
     Object mLock = new Object();
@@ -79,12 +89,20 @@ public class CameraHandler extends Handler implements ICameraHandler{
             if(camera != null && parameters != null && newMetering != null){
                 Rect meterRect = newMetering.getMeterRect();
                 Rect focusRect = newMetering.getFocusRect();
+                if(mListener != null){
+                    mListener.onMeteringSwitch(CameraHelper.revertMeterRect(meterRect,mCameraOrientation,mFacing == Camera.CameraInfo.CAMERA_FACING_FRONT,mViewWidth,mViewHeight,mPreviewWidth,mPreviewHeight));
+                }
                 Metering.ExposureStatus status = newMetering.getState();
-                Log.e(TAG,"onMeteringChanged:"+oldMetering.getState().name()+";"+newMetering.getState().name());
+                Log.e(TAG,"onMeteringChanged:"+oldMetering.getState().name()+";"+newMetering.getState().name()+";"+meterRect);
                 try{
                     boolean meterResult = false;
                     boolean focusResult = false;
                     switch (status) {
+                        case DEFAULT:{
+                            parameters.setMeteringAreas(null);
+                            camera.setParameters(parameters);
+                        }
+                        break;
                         case MANUAL: {
                             meterResult = CameraHelper.setMetering(parameters, meterRect, 1000);
 //                            focusResult = CameraHelper.setFocus(parameters, focusRect, 1000);
@@ -141,10 +159,34 @@ public class CameraHandler extends Handler implements ICameraHandler{
         }
     });
 
+    BufferedOutputStream bos = null;
+    int i = 0;
     FrameProcessor mFrameProcessor = new FrameProcessor(){
         @Override
         public void onPreviewFrame(byte[] data, Camera camera) {
-            mMeteringDelegate.onFrameAvailable(data, mPreviewWidth, mPreviewHeight);
+            if(bos == null){
+                try {
+                    String file = CameraActivity.mContext.getFilesDir().getAbsolutePath()+"/test.yuv";
+                   bos = new BufferedOutputStream(new FileOutputStream(new File(file)));
+                } catch (FileNotFoundException e) {
+                    e.printStackTrace();
+                }
+            }
+            if(i == 20){
+                try {
+                    bos.write(data);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }finally {
+                    try {
+                        bos.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+            i++;
+            mMeteringDelegate.onFrameAvailable(data, mPreviewWidth ,mPreviewHeight);
             super.onPreviewFrame(data, camera);
         }
     };
@@ -207,21 +249,34 @@ public class CameraHandler extends Handler implements ICameraHandler{
                 if(camera == null || parameters == null){
                     return;
                 }
-                PointTransform pointTransform = new PointTransform();
-                int orientation = mOrientation;
+                int orientation = mCameraOrientation;
                 int captureWidth = mPreviewWidth;
                 int captureHeight = mPreviewHeight;
-                if (viewWidth > 0 && viewHeight > 0) {
-                    CameraHelper.getPointTransform(pointTransform, orientation, captureWidth, captureHeight, mFacing == Camera.CameraInfo.CAMERA_FACING_FRONT,
-                            viewWidth, viewHeight);
-                }
-                float areaMultiple = 1.5f;
-                Rect meterRect = CameraHelper.calculateTapArea(touchX, touchY, viewWidth, viewHeight, 1.5f, pointTransform);
-                Rect focusRect = CameraHelper.calculateTapArea(touchX,touchY,viewWidth,viewHeight,1.0f,pointTransform);
-                Point centerPoint = CameraHelper.transFormPoint(new PointF(touchX,touchY),orientation,captureWidth,captureHeight,viewWidth,viewHeight);
-                boolean manualFocus = mMeteringDelegate.onManualFocus(meterRect,focusRect,centerPoint);
+                mViewWidth = viewWidth;
+                mViewHeight = viewHeight;
+                float areaMultiple = CameraHelper.DEFAULT_AREA_MULTIPLE;
+                PointF centerPoint = CameraHelper.transFormPoint(new PointF(touchX, touchY), orientation,mFacing == Camera.CameraInfo.CAMERA_FACING_FRONT,viewWidth, viewHeight, captureWidth, captureHeight);
+                Rect meterRect = CameraHelper.calcMeterRect(centerPoint, captureWidth,captureHeight,areaMultiple);
+                Rect focusRect = meterRect;
+                boolean manualFocus = mMeteringDelegate.onManualFocus(meterRect, focusRect, new Point((int)centerPoint.x,(int)centerPoint.y));
                 Log.e(TAG, "requestFocusMetering:" + manualFocus + ",touchX:" + touchX + ";touchY:" +
                         touchY + ";viewWidth:" + viewWidth + ";viewHeight:" + viewHeight + ";areaMultiple:" + areaMultiple);
+
+//                PointTransform pointTransform = new PointTransform();
+//                int orientation = mOrientation;
+//                int captureWidth = mPreviewWidth;
+//                int captureHeight = mPreviewHeight;
+//                if (viewWidth > 0 && viewHeight > 0) {
+//                    CameraHelper.getPointTransform(pointTransform, orientation, captureWidth, captureHeight, mFacing == Camera.CameraInfo.CAMERA_FACING_FRONT,
+//                            viewWidth, viewHeight);
+//                }
+//                float areaMultiple = 1.5f;
+//                Rect meterRect = CameraHelper.calculateTapArea(touchX, touchY, viewWidth, viewHeight, 1.5f, pointTransform);
+//                Rect focusRect = CameraHelper.calculateTapArea(touchX,touchY,viewWidth,viewHeight,1.0f,pointTransform);
+//                Point centerPoint = CameraHelper.transFormPoint(new PointF(touchX,touchY),orientation,viewWidth,viewHeight,captureWidth,captureHeight);
+//                boolean manualFocus = mMeteringDelegate.onManualFocus(meterRect,focusRect,centerPoint);
+//                Log.e(TAG, "requestFocusMetering:" + manualFocus + ",touchX:" + touchX + ";touchY:" +
+//                        touchY + ";viewWidth:" + viewWidth + ";viewHeight:" + viewHeight + ";areaMultiple:" + areaMultiple);
             }
                 break;
             case MSG_RELEASE:
@@ -306,8 +361,8 @@ public class CameraHandler extends Handler implements ICameraHandler{
                     cameraIndexer.init();
                     cameraIndexer.initCamera2(mContext);
                 }
-                int cameraId = cameraIndexer.selectCameraId(mFacing);
-                mFacing = (mFacing+1)%2;
+                int cameraId = 1;//cameraIndexer.selectCameraId(mFacing);
+                mFacing =Camera.CameraInfo.CAMERA_FACING_FRONT;// (mFacing+1)%2;
                 Camera.getCameraInfo(cameraId,info);
                 Camera.getNumberOfCameras();
                 camera = Camera.open(cameraId);
@@ -461,12 +516,13 @@ public class CameraHandler extends Handler implements ICameraHandler{
                 degrees = 270;
                 break;
         }
+        mCameraOrientation = info.orientation;
         int result;
         if(info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT){
-            result = (info.orientation + degrees)%360;
+            result = (mCameraOrientation + degrees)%360;
             result = (360 - result)%360;
         }else{
-            result = (info.orientation - degrees + 360)%360;
+            result = (mCameraOrientation - degrees + 360)%360;
         }
         return result;
     }

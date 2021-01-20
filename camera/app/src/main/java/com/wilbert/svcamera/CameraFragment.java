@@ -1,6 +1,12 @@
 package com.wilbert.svcamera;
 
+import android.Manifest;
+import android.content.Context;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.Matrix;
+import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
 import android.opengl.GLES20;
@@ -11,6 +17,7 @@ import android.os.Bundle;
 import android.os.HandlerThread;
 import android.os.Message;
 import android.os.SystemClock;
+import android.preference.Preference;
 import android.util.Log;
 import android.view.GestureDetector;
 import android.view.LayoutInflater;
@@ -32,6 +39,7 @@ import com.wilbert.svcamera.filters.GLImageFilter;
 import com.wilbert.svcamera.filters.GLImageOESInputFilter;
 import com.wilbert.svcamera.glutils.OpenGLUtils;
 import com.wilbert.svcamera.glutils.TextureRotationUtils;
+import com.wilbert.svcamera.metering.RectDrawer;
 import com.wilbert.svcamera.views.FocusView;
 
 import java.nio.FloatBuffer;
@@ -43,6 +51,7 @@ import javax.microedition.khronos.opengles.GL10;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.RequiresApi;
 import androidx.fragment.app.Fragment;
 
 public class CameraFragment extends Fragment implements GLSurfaceView.Renderer, SurfaceTexture.OnFrameAvailableListener, View.OnClickListener {
@@ -76,6 +85,11 @@ public class CameraFragment extends Fragment implements GLSurfaceView.Renderer, 
     int screenWidth;
     int screenHeight;
     byte[] mYuvData;
+    float[] mTestRect = new float[8];
+    Matrix matrix;
+    private void setMeteringFlag(){
+//        Preference preference = getContext().getSharedPreferences("mediaReport", Context.MODE_PRIVATE);
+    }
 
     @Nullable
     @Override
@@ -105,6 +119,12 @@ public class CameraFragment extends Fragment implements GLSurfaceView.Renderer, 
         mFocusView.setFocusListener(mFocusListener);
         screenWidth = getResources().getDisplayMetrics().widthPixels;
         screenHeight = getResources().getDisplayMetrics().heightPixels;
+        float[] p = new float[]{1,1};
+        Matrix matrix = new Matrix();
+//        matrix.setRotate(90,2,2);
+        matrix.setScale(1,-1,2,2);
+        matrix.mapPoints(p);
+        Log.e("mapPoints","point:"+p[0]+"*"+p[1]);
         int width = screenWidth;
         int height = screenHeight;
         if(1.0f * screenWidth/screenHeight > 720.0f/1280.0f){
@@ -123,16 +143,28 @@ public class CameraFragment extends Fragment implements GLSurfaceView.Renderer, 
     }
 
     FocusView.FocusListener mFocusListener = new FocusView.FocusListener() {
+        @RequiresApi(api = Build.VERSION_CODES.M)
         @Override
         public void onFocusEvent(MotionEvent event) {
-            float x = event.getX();
-            float y = event.getY();
-            int width = mFocusView.getWidth();
-            int height = mFocusView.getHeight();
-            Log.e(TAG,"onSingleTapConfirmed:"+x+"*"+y+";"+width+"*"+height);
-            mCameraHandler.requestFocus(x,y,mFocusView.getWidth(),mFocusView.getHeight());
+            if(getActivity().checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)!= PackageManager.PERMISSION_GRANTED){
+                requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 0);
+            }else if(getActivity().checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE)!= PackageManager.PERMISSION_GRANTED){
+                requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, 0);
+            }else{
+                float x = event.getX();
+                float y = event.getY();
+                int width = mFocusView.getWidth();
+                int height = mFocusView.getHeight();
+                Log.e(TAG,"onSingleTapConfirmed:"+x+"*"+y+";"+width+"*"+height);
+                mCameraHandler.requestFocus(x,y,mFocusView.getWidth(),mFocusView.getHeight());
+            }
         }
     };
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+    }
 
     private void initCamera(){
         HandlerThread thread = new HandlerThread("CameraThread");
@@ -185,6 +217,31 @@ public class CameraFragment extends Fragment implements GLSurfaceView.Renderer, 
                 }
             });
         }
+
+        @Override
+        public void onMeteringSwitch(Rect rect) {
+            if(rect == null){
+                return;
+            }
+            if(matrix == null){
+                matrix = new Matrix();
+                matrix.setScale(-1,1);
+            }
+            RectF rectF = new RectF(rect);
+            matrix.mapRect(rectF);
+            float left = rectF.left/1000;
+            float top = rectF.top / 1000;
+            float right = rectF.right / 1000;
+            float bottom = rectF.bottom / 1000;
+            mTestRect[0] = left;
+            mTestRect[1] = top;
+            mTestRect[2] = left;
+            mTestRect[3] = bottom;
+            mTestRect[4] = right;
+            mTestRect[5] = bottom;
+            mTestRect[6] = right;
+            mTestRect[7] = top;
+        }
     };
 
     @Override
@@ -217,6 +274,8 @@ public class CameraFragment extends Fragment implements GLSurfaceView.Renderer, 
         mCameraHandler.release();
     }
 
+    RectDrawer drawer = null;
+
     @Override
     public void onSurfaceCreated(GL10 gl, EGLConfig config) {
         mTextureId = OpenGLUtils.createOESTexture();
@@ -227,6 +286,7 @@ public class CameraFragment extends Fragment implements GLSurfaceView.Renderer, 
         if(mPreviewListener != null){
             mPreviewListener.onSurfaceCreated(mSurfaceTexture);
         }
+        drawer = new RectDrawer();
         mSurfaceCreated.set(true);
     }
 
@@ -284,6 +344,8 @@ public class CameraFragment extends Fragment implements GLSurfaceView.Renderer, 
             mInputFilter.setTextureTransformMatrix(mSTMatrix);
             int textureId = mInputFilter.drawFrameBuffer(mTextureId, mVertexBuffer, mTextureBuffer);
             mOutputFilter.drawFrame(textureId, mVertexBuffer, mTextureBuffer);
+
+            drawer.draw(mTestRect);
         }
     }
 

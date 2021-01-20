@@ -1,45 +1,32 @@
 package com.wilbert.svcamera.metering;
 
+import android.graphics.Matrix;
 import android.graphics.Point;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.hardware.Camera;
 import android.util.Log;
 
-import java.util.concurrent.atomic.AtomicBoolean;
-
 /**
- * 默认为中心测光
- * 当点击手动测光时进入手动测光模式
- * 当不处于手动测光状态画面中出现人脸时切换到人脸测光
- * 当为智能模式时，会检测手动测光区域像素是否发生变化，如果发生较大变化则取消手动测光，转换到中心/人脸测光
- * 当为非智能模式时，会锁定在手动测光区域
- *
  * @author wilbert
  * @Date 2020/12/22 21:18
  * @email jiangwang.wilbert@bigo.sg
  **/
 public class MeteringDelegate {
-    public static boolean sDebug = true;
-    private final String TAG = "FaceDetect";
+    public static boolean sDebug = false;
+    private final String TAG = "MeteringDelegate";
     private MeteringController mMeteringController;
     private MeteringCallback mMeteringCallback;
-    private AtomicBoolean mHasFace = new AtomicBoolean(false);
 
     public MeteringDelegate(MeteringCallback callback){
         this.mMeteringCallback = callback;
     }
 
-    /**
-     * 0: 不使用任何测光对焦策略
-     * 1: 手动测光后智能判断当前是否可回到人脸以及中心模式
-     * 2: 手动测光后锁定测光位置
-     * @return
-     */
     private int getMeteringConfig(){
-        return 2;
+        return 1;
     }
 
-    public boolean canFaceMetering(){
+    public boolean hitOnManualFocusMetering(){
         return getMeteringConfig() > 0;
     }
 
@@ -49,29 +36,26 @@ public class MeteringDelegate {
 
     public boolean startFaceDetect(Camera camera){
         boolean result = false;
-        if(canFaceMetering()){
+        if(hitOnManualFocusMetering()){
             try {
-                if (camera.getParameters().getMaxNumDetectedFaces() > 0)
+                if (camera.getParameters().getMaxNumDetectedFaces() > 0) {
                     camera.setFaceDetectionListener(new Camera.FaceDetectionListener() {
                         @Override
                         public void onFaceDetection(Camera.Face[] faces, Camera camera) {
                             boolean hasFace = faces != null && faces.length > 0;
-                            mHasFace.set(hasFace);
-                            Rect rect = new Rect(0,0,0,0);
-                            if(MeteringDelegate.sDebug) {
-                                Log.e(TAG, "mHasFace:" + hasFace + ";" + (hasFace ? faces[0].rect : ""));
-                            }
+                            Rect rect = new Rect(0, 0, 0, 0);
                             if (hasFace) {
-                                Rect faceRect = faces[0].rect;
-                                rect.set(CameraHelper.clamp(faceRect.left,-1000,1000),
-                                        CameraHelper.clamp(faceRect.top,-1000,1000),
-                                        CameraHelper.clamp(faceRect.right,-1000,1000),
-                                        CameraHelper.clamp(faceRect.bottom,-1000,1000));
+                                RectF faceRect = new RectF(faces[0].rect);
+                                rect.set(CameraHelper.clamp((int) faceRect.left, -1000, 1000),
+                                        CameraHelper.clamp((int) faceRect.top, -1000, 1000),
+                                        CameraHelper.clamp((int) faceRect.right, -1000, 1000),
+                                        CameraHelper.clamp((int) faceRect.bottom, -1000, 1000));
                             }
-                            getMeteringController().onFaceEvent(hasFace,rect);
+                            getMeteringController().onFaceEvent(hasFace, rect);
                         }
                     });
-                camera.startFaceDetection();
+                    camera.startFaceDetection();
+                }
             } catch (Exception e) {
                 Log.w(TAG, "[onCameraStartPreview] face detection failed", e);
             }
@@ -82,7 +66,7 @@ public class MeteringDelegate {
 
     public boolean onFrameAvailable(byte[] yuv420,int width,int height){
         boolean result = false;
-        if (canFaceMetering()) {
+        if (hitOnManualFocusMetering()) {
             getMeteringController().onFrameAvailable(yuv420, width, height);
             result = true;
         }
@@ -91,7 +75,7 @@ public class MeteringDelegate {
 
     public boolean onManualFocus(Rect meteringRect,Rect focusRect, Point manualCenter){
         boolean result = false;
-        if (canFaceMetering()) {
+        if (hitOnManualFocusMetering()) {
             getMeteringController().onManualEvent(getMeterType(),meteringRect,focusRect,manualCenter);
             result = true;
         }

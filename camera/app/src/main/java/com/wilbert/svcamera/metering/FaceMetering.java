@@ -1,5 +1,7 @@
 package com.wilbert.svcamera.metering;
 
+import android.os.SystemClock;
+
 /**
  * @author wilbert
  * @Date 2020/12/22 18:33
@@ -8,6 +10,7 @@ package com.wilbert.svcamera.metering;
 public class FaceMetering extends Metering {
 
     private static final String TAG = "FaceMetering";
+    private long mLastFaceMeteringTime = 0L;
 
     protected FaceMetering(MeteringController controller) {
         super(controller, ExposureStatus.FACE_EXIST);
@@ -19,7 +22,6 @@ public class FaceMetering extends Metering {
             //有手动对焦优先手动对焦
             //resetFlag避免在切换时调用两遍回调
             mController.switchState(new ManualMetering(mController).onManualEvent(mMeterType, mMeterRect,mFocusRect,mManualCenter).resetFlag());
-            mHasManual = false;
             return;
         }
         if(mFaceChanged){
@@ -31,6 +33,7 @@ public class FaceMetering extends Metering {
             mFaceChanged = false;
             return;
         }
+        mController.switchState(new DefaultMetering(mController).onFaceEvent(mHasFace,mMeterRect).resetFlag());
     }
 
 }

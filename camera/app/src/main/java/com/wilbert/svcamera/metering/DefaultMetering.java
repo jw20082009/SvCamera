@@ -2,15 +2,13 @@ package com.wilbert.svcamera.metering;
 
 /**
  * @author wilbert
- * @Date 2020/12/22 18:33
+ * @Date 2021/1/14 22:00
  * @email jiangwang.wilbert@bigo.sg
  **/
-public class CenterMetering extends Metering {
+public class DefaultMetering  extends Metering{
 
-    private static final String TAG = "CenterMetering";
-
-    protected CenterMetering(MeteringController controller) {
-        super(controller, ExposureStatus.CENTER_METERING);
+    protected DefaultMetering(MeteringController controller) {
+        super(controller, ExposureStatus.DEFAULT);
     }
 
     @Override
@@ -22,15 +20,13 @@ public class CenterMetering extends Metering {
             return;
         }
         if(mFaceChanged){
-            //resetFlag避免在切换时调用两遍回调
             if(mHasFace){
-                mController.switchState(new FaceMetering(mController).onFaceEvent(mHasFace, mMeterRect).resetFlag());
+                mController.switchState(new FaceMetering(mController).onFaceEvent(mHasFace,mMeterRect).resetFlag());
             }else{
                 mController.switchState(new CenterMetering(mController));
             }
             mFaceChanged = false;
             return;
         }
-        mController.switchState(new DefaultMetering(mController).onFaceEvent(mHasFace,mMeterRect).resetFlag());
     }
 }
