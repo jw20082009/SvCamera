@@ -5,4 +5,13 @@
     android:id="@+id/layout">
 
 
+    <TextView
+        android:layout_width="100dp"
+        android:layout_height="50dp"
+        android:layout_gravity="left|bottom"
+        android:text="camera"
+        android:background="#99272727"
+        android:id="@+id/tvCamera"
+        android:gravity="center"
+        />
 </FrameLayout>

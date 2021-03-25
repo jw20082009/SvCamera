@@ -1,56 +1,44 @@
 package com.wilbert.svcamera;
 
 import android.content.Context;
-import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
-import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.Message;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Surface;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 
-import com.wilbert.svcamera.filters.GLImageFilter;
-import com.wilbert.svcamera.filters.GLImageOESInputFilter;
-import com.wilbert.svcamera.glutils.OpenGLUtils;
-import com.wilbert.svcamera.glutils.TextureRotationUtils;
+import com.wilbert.svcamera.render.IRender;
+import com.wilbert.svcamera.render.YuvRender;
 
 import java.io.IOException;
-import java.nio.FloatBuffer;
 import java.util.concurrent.atomic.AtomicBoolean;
-
-import javax.microedition.khronos.egl.EGLConfig;
-import javax.microedition.khronos.opengles.GL10;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
-public class CameraFragment extends Fragment implements GLSurfaceView.Renderer, SurfaceTexture.OnFrameAvailableListener {
+public class CameraFragment extends Fragment {
+    final String TAG = "CameraFragment";
 
     GLSurfaceView mSurfaceView;
     CameraHandler mHandler;
+    Camera.CameraInfo mCameraInfo;
 
-    AtomicBoolean mSurfaceCreated = new AtomicBoolean(false);
     AtomicBoolean mCameraOpened = new AtomicBoolean(false);
-    int mSurfaceWidth = 0;
-    int mSurfaceHeight = 0;
-    int mPreviewWidth = 960;
-    int mPreviewHeight = 540;
+
+    int mPreviewWidth = 1280;
+    int mPreviewHeight = 720;
     int mCameraId = Camera.CameraInfo.CAMERA_FACING_FRONT;
-    int mTextureId = OpenGLUtils.GL_NOT_TEXTURE;
-    SurfaceTexture mSurfaceTexture;
-    GLImageOESInputFilter mInputFilter;
-    GLImageFilter mOutputFilter;
-    protected final float[] mSTMatrix = new float[16];
-    protected FloatBuffer mVertexBuffer;
-    protected FloatBuffer mTextureBuffer;
+
+    IRender mRender;
 
     Object mLock = new Object();
 
@@ -59,15 +47,14 @@ public class CameraFragment extends Fragment implements GLSurfaceView.Renderer, 
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         View layout = inflater.inflate(R.layout.fragment_camera,container,false);
         mSurfaceView = layout.findViewById(R.id.gl_surfaceview);
-        mSurfaceView.setEGLContextClientVersion(2);
-        mSurfaceView.setRenderer(this);
-        mSurfaceView.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
+        mRender = new YuvRender();
+        mRender.init(mSurfaceView);
         initCamera();
         return layout;
     }
 
     private void initCamera(){
-        HandlerThread thread = new HandlerThread("CameraThread");
+        HandlerThread thread = new HandlerThread(TAG+"_CameraThread");
         thread.start();
         mHandler = new CameraHandler(thread.getLooper());
     }
@@ -82,7 +69,6 @@ public class CameraFragment extends Fragment implements GLSurfaceView.Renderer, 
     public void onPause() {
         super.onPause();
         mSurfaceView.onPause();
-        mSurfaceCreated.set(false);
     }
 
     @Override
@@ -91,64 +77,30 @@ public class CameraFragment extends Fragment implements GLSurfaceView.Renderer, 
         mHandler.release();
     }
 
-    @Override
-    public void onSurfaceCreated(GL10 gl, EGLConfig config) {
-        mTextureId = OpenGLUtils.createOESTexture();
-        mSurfaceTexture = new SurfaceTexture(mTextureId);
-        mVertexBuffer = OpenGLUtils.createFloatBuffer(TextureRotationUtils.CubeVertices);
-        mTextureBuffer = OpenGLUtils.createFloatBuffer(TextureRotationUtils.TextureVertices);
-        mSurfaceCreated.set(true);
-        synchronized (mLock){
-            mLock.notifyAll();
+    public int getOrientation(){
+        if(mCameraInfo == null){
+            return 0;
         }
+        return mCameraInfo.orientation;
     }
 
-    @Override
-    public void onSurfaceChanged(GL10 gl, int width, int height) {
-        mSurfaceWidth = width;
-        mSurfaceHeight = height;
-        GLES20.glViewport(0, 0, width, height);
-        if(mInputFilter != null){
-            mInputFilter.onDisplaySizeChanged(width,height);
+    public boolean isFlipHorizontal(){
+        if(mCameraInfo == null){
+            return false;
         }
-        if(mOutputFilter != null){
-            mOutputFilter.onDisplaySizeChanged(width,height);
-        }
+        return mCameraInfo.facing == Camera.CameraInfo.CAMERA_FACING_FRONT ? true : false;
     }
 
-    @Override
-    public void onDrawFrame(GL10 gl) {
-        if(!mSurfaceCreated.get() || !mCameraOpened.get()){
-            return;
+    public boolean isFlipVertical(){
+        if(mCameraInfo == null){
+            return false;
         }
-        mSurfaceTexture.updateTexImage();
-        mSurfaceTexture.getTransformMatrix(mSTMatrix);
-        if(mInputFilter == null){
-            mInputFilter = new GLImageOESInputFilter(getContext());
-            mInputFilter.initFrameBuffer(mPreviewHeight,mPreviewWidth);
-            mInputFilter.onInputSizeChanged(mPreviewHeight,mPreviewWidth);
-            mInputFilter.onDisplaySizeChanged(mSurfaceWidth,mSurfaceHeight);
-        }
-        if(mOutputFilter == null){
-            mOutputFilter = new GLImageFilter(getContext());
-            mOutputFilter.onInputSizeChanged(mPreviewHeight,mPreviewWidth);
-            mOutputFilter.onDisplaySizeChanged(mSurfaceWidth,mSurfaceHeight);
-        }
-        mInputFilter.setTextureTransformMatrix(mSTMatrix);
-        int textureId = mInputFilter.drawFrameBuffer(mTextureId,mVertexBuffer,mTextureBuffer);
-        mOutputFilter.drawFrame(textureId,mVertexBuffer,mTextureBuffer);
+        return (mCameraInfo.orientation == 90 || mCameraInfo.orientation == 270) ? true : false;
     }
-
-    @Override
-    public void onFrameAvailable(SurfaceTexture surfaceTexture) {
-        mSurfaceView.requestRender();
-    }
-
 
     class CameraHandler extends Handler{
 
         Camera camera;
-        Camera.CameraInfo info;
 
         public static final int MSG_CAMERA_START = 0x01;
 
@@ -165,14 +117,15 @@ public class CameraFragment extends Fragment implements GLSurfaceView.Renderer, 
             super.handleMessage(msg);
             switch (msg.what){
                 case MSG_CAMERA_START:
+                    Log.i(TAG,"start Camera");
                     if(mCameraOpened.get())
                         return;
-                    info = new Camera.CameraInfo();
-                    Camera.getCameraInfo(mCameraId,info);
+                    mCameraInfo = new Camera.CameraInfo();
+                    Camera.getCameraInfo(mCameraId,mCameraInfo);
                     camera = Camera.open(mCameraId);
                     Camera.Parameters parameters = camera.getParameters();
                     parameters.setPreviewSize(mPreviewWidth,mPreviewHeight);
-                    parameters.setPictureSize(1280,720);
+//                    parameters.setPictureSize(960,540);
                     camera.setParameters(parameters);
                     mCameraOpened.set(true);
                     break;
@@ -180,20 +133,18 @@ public class CameraFragment extends Fragment implements GLSurfaceView.Renderer, 
                     if(camera == null){
                         break;
                     }
-                    if(!mSurfaceCreated.get()){
-                        synchronized (mLock){
-                            try {
-                                mLock.wait();
-                            } catch (InterruptedException e) {
-                                e.printStackTrace();
-                            }
-                        }
-                    }
+
                     try {
-                        camera.setDisplayOrientation(calcPreviewOrientation(getContext(),info));
-                        camera.setPreviewTexture(mSurfaceTexture);
-                        mSurfaceTexture.setOnFrameAvailableListener(CameraFragment.this);
+                        camera.setDisplayOrientation(calcPreviewOrientation(getContext(),mCameraInfo));
+                        camera.addCallbackBuffer(new byte[mPreviewWidth*mPreviewHeight*3/2]);
+                        camera.addCallbackBuffer(new byte[mPreviewWidth*mPreviewHeight*3/2]);
+                        camera.setPreviewCallbackWithBuffer(mPreviewCallback);
+                        camera.setPreviewTexture(mRender.getSurfaceTexture());
                         camera.startPreview();
+                        mRender.onCameraOpened(mPreviewWidth,mPreviewHeight);
+                        if(mRender instanceof YuvRender){
+                            ((YuvRender) mRender).adjustTextureBuffer(getOrientation(),isFlipHorizontal(),isFlipVertical());
+                        }
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
@@ -244,6 +195,20 @@ public class CameraFragment extends Fragment implements GLSurfaceView.Renderer, 
             }
             return result;
         }
+
     }
 
+    int previewFrameTimes = 0;
+
+    Camera.PreviewCallback mPreviewCallback = new Camera.PreviewCallback() {
+        @Override
+        public void onPreviewFrame(byte[] data, Camera camera) {
+//            Log.i(TAG,"onPreviewFrame,avaliableTimes:"+avaliableTimes+";previewFrameTimes:"+previewFrameTimes);
+            previewFrameTimes ++;
+            if(mRender instanceof YuvRender){
+                ((YuvRender) mRender).onFrameAvailable(data);
+            }
+            camera.addCallbackBuffer(data);
+        }
+    };
 }
