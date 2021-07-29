@@ -10,7 +10,7 @@ import java.nio.FloatBuffer;
 /**
  * @author wilbert
  * @Date 2021/1/14 15:46
- * @email jiangwang.wilbert@bigo.sg
+ * @email jw20082009@qq.com
  **/
 public class RectDrawer {
 

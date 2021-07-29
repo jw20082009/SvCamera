@@ -5,7 +5,7 @@ import android.app.Activity;
 /**
  * @author wilbert
  * @Date 2020/12/10 16:54
- * @email jiangwang.wilbert@bigo.sg
+ * @email jw20082009@qq.com
  **/
 public class Camera2Activity extends Activity {
 

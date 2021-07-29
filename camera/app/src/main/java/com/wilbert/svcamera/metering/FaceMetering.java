@@ -5,7 +5,7 @@ import android.os.SystemClock;
 /**
  * @author wilbert
  * @Date 2020/12/22 18:33
- * @email jiangwang.wilbert@bigo.sg
+ * @email jw20082009@qq.com
  **/
 public class FaceMetering extends Metering {
 

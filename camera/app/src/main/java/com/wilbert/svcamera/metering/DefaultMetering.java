@@ -3,7 +3,7 @@ package com.wilbert.svcamera.metering;
 /**
  * @author wilbert
  * @Date 2021/1/14 22:00
- * @email jiangwang.wilbert@bigo.sg
+ * @email jw20082009@qq.com
  **/
 public class DefaultMetering  extends Metering{
 

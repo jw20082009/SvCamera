@@ -5,7 +5,7 @@ import com.wilbert.svcamera.IPreviewListener;
 /**
  * @author wilbert
  * @Date 2020/12/15 10:04
- * @email jiangwang.wilbert@bigo.sg
+ * @email jw20082009@qq.com
  **/
 public interface ICameraHandler {
 

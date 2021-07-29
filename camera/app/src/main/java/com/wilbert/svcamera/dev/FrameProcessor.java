@@ -5,7 +5,7 @@ import android.hardware.Camera;
 /**
  * @author wilbert
  * @Date 2021/1/5 16:51
- * @email jiangwang.wilbert@bigo.sg
+ * @email jw20082009@qq.com
  **/
 public class FrameProcessor implements Camera.PreviewCallback{
 

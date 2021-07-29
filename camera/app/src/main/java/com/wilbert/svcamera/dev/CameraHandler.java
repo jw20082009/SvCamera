@@ -36,7 +36,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * @author wilbert
  * @Date 2020/12/15 10:00
- * @email jiangwang.wilbert@bigo.sg
+ * @email jw20082009@qq.com
  **/
 @SuppressWarnings("deprecation")
 public class CameraHandler extends Handler implements ICameraHandler{

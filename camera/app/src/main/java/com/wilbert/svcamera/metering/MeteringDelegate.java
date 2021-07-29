@@ -10,7 +10,7 @@ import android.util.Log;
 /**
  * @author wilbert
  * @Date 2020/12/22 21:18
- * @email jiangwang.wilbert@bigo.sg
+ * @email jw20082009@qq.com
  **/
 public class MeteringDelegate {
     public static boolean sDebug = false;

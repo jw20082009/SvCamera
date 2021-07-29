@@ -10,7 +10,7 @@ import android.view.MotionEvent;
 /**
  * @author wilbert
  * @Date 2020/12/26 14:30
- * @email jiangwang.wilbert@bigo.sg
+ * @email jw20082009@qq.com
  **/
 public class FocusGLSurfaceView extends GLSurfaceView implements GestureDetector.OnGestureListener {
     private final String TAG = "FocusGLSurfaceView";

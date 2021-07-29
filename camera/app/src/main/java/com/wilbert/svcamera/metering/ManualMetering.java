@@ -18,7 +18,7 @@ import java.io.IOException;
 /**
  * @author wilbert
  * @Date 2020/12/22 18:33
- * @email jiangwang.wilbert@bigo.sg
+ * @email jw20082009@qq.com
  **/
 public class ManualMetering extends Metering {
     private static final String TAG = "ManualMetering";

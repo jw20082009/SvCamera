@@ -14,7 +14,7 @@ import java.util.List;
 /**
  * @author wilbert
  * @Date 2020/12/15 11:58
- * @email jiangwang.wilbert@bigo.sg
+ * @email jw20082009@qq.com
  **/
 public class CameraIndexer {
     private final String TAG = "CameraIndexer";

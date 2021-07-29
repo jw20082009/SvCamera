@@ -11,7 +11,7 @@ import android.widget.TextView;
 /**
  * @author wilbert
  * @Date 2020/12/26 14:44
- * @email jiangwang.wilbert@bigo.sg
+ * @email jw20082009@qq.com
  **/
 public class FocusTextView extends androidx.appcompat.widget.AppCompatTextView implements View.OnTouchListener {
     private final String TAG = "FocusTextView";

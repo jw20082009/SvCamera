@@ -7,7 +7,7 @@ import android.util.Log;
 /**
  * @author wilbert
  * @Date 2020/12/22 18:33
- * @email jiangwang.wilbert@bigo.sg
+ * @email jw20082009@qq.com
  **/
 public abstract class Metering implements IMetering {
     private final String TAG = "Metering";

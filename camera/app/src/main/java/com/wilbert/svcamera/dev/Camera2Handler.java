@@ -41,7 +41,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * @author wilbert
  * @Date 2020/12/15 20:51
- * @email jiangwang.wilbert@bigo.sg
+ * @email jw20082009@qq.com
  **/
 public class Camera2Handler extends Handler implements ICameraHandler {
 

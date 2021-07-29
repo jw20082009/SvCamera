@@ -6,7 +6,7 @@ import android.graphics.SurfaceTexture;
 /**
  * @author wilbert
  * @Date 2020/12/15 10:31
- * @email jiangwang.wilbert@bigo.sg
+ * @email jw20082009@qq.com
  **/
 public interface IPreviewListener {
     void onSurfaceCreated(SurfaceTexture surfaceTexture);

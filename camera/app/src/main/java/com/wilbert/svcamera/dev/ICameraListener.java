@@ -5,7 +5,7 @@ import android.graphics.Rect;
 /**
  * @author wilbert
  * @Date 2020/12/15 10:11
- * @email jiangwang.wilbert@bigo.sg
+ * @email jw20082009@qq.com
  **/
 public interface ICameraListener {
     void onSwitchStabilization(int status);//-1: not support, 0: off, 1: on
